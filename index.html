@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>労働時間管理アプリ</title>
+<style>
+body { font-family: -apple-system; margin:0; padding:20px; background:#f3f4f6;}
+.card { background:white; padding:16px; border-radius:16px; margin-bottom:20px; box-shadow:0 4px 10px rgba(0,0,0,0.05);}
+h1 { font-size:22px; }
+input { padding:8px; margin:4px 0; width:100%; border-radius:8px; border:1px solid #ddd;}
+button { padding:10px; width:100%; border:none; border-radius:10px; background:#111827; color:white; font-size:16px;}
+.month { background:#fafafa; padding:10px; border-radius:12px; margin-top:10px;}
+canvas { background:white; border-radius:16px; }
+</style>
+</head>
+<body>
+
+<h1>労働時間管理アプリ</h1>
+
+<div class="card">
+<label>日付</label>
+<input type="date" id="date">
+
+<label>開始時間</label>
+<input type="time" id="start">
+
+<label>終了時間</label>
+<input type="time" id="end">
+
+<label>月間上限時間</label>
+<input type="number" id="limit" value="160">
+
+<button onclick="addEntry()">追加</button>
+</div>
+
+<div class="card">
+<h2>月別集計</h2>
+<div id="summary"></div>
+</div>
+
+<div class="card">
+<h2>グラフ</h2>
+<canvas id="chart" height="200"></canvas>
+</div>
+
+<script>
+let entries = JSON.parse(localStorage.getItem("workData") || "[]");
+
+function save() {
+localStorage.setItem("workData", JSON.stringify(entries));
+}
+
+function calculateHours(start, end) {
+let [sh, sm] = start.split(":").map(Number);
+let [eh, em] = end.split(":").map(Number);
+return (eh + em/60) - (sh + sm/60);
+}
+
+function addEntry() {
+let date = document.getElementById("date").value;
+let start = document.getElementById("start").value;
+let end = document.getElementById("end").value;
+if (!date || !start || !end) return;
+
+let hours = calculateHours(start,end);
+entries.push({date, hours});
+save();
+render();
+}
+
+function render() {
+let limit = Number(document.getElementById("limit").value);
+let summary = {};
+entries.forEach(e=>{
+let month = e.date.slice(0,7);
+if(!summary[month]) summary[month]=0;
+summary[month]+=e.hours;
+});
+
+let container=document.getElementById("summary");
+container.innerHTML="";
+
+let cumulativeActual=0;
+let cumulativeLimit=0;
+
+Object.keys(summary).sort().forEach(month=>{
+let actual=summary[month];
+cumulativeActual+=actual;
+cumulativeLimit+=limit;
+let diff=limit-actual;
+let cumulativeDiff=cumulativeLimit-cumulativeActual;
+
+container.innerHTML+=`
+<div class="month">
+<b>${month}</b><br>
+実労働時間: ${actual.toFixed(2)} 時間<br>
+上限との差: ${diff.toFixed(2)} 時間<br>
+累積差異: ${cumulativeDiff.toFixed(2)} 時間
+</div>
+`;
+});
+
+drawChart(summary,limit);
+}
+
+function drawChart(summary,limit){
+let canvas=document.getElementById("chart");
+let ctx=canvas.getContext("2d");
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+let months=Object.keys(summary).sort();
+let max=Math.max(...Object.values(summary),limit);
+let width=canvas.width/months.length;
+
+months.forEach((m,i)=>{
+let h=summary[m]/max*150;
+ctx.fillStyle="#111827";
+ctx.fillRect(i*width+20,180-h,30,h);
+
+let limitH=limit/max*150;
+ctx.fillStyle="#999";
+ctx.fillRect(i*width+60,180-limitH,10,limitH);
+
+ctx.fillStyle="black";
+ctx.fillText(m,i*width+20,195);
+});
+}
+
+render();
+</script>
+
+</body>
+</html>
