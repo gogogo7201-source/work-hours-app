@@ -5,13 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>労働時間管理アプリ</title>
 <style>
-body { font-family: -apple-system; margin:0; padding:20px; background:#f3f4f6;}
+body { font-family:-apple-system; margin:0; padding:20px; background:#f3f4f6;}
 .card { background:white; padding:16px; border-radius:16px; margin-bottom:20px; box-shadow:0 4px 10px rgba(0,0,0,0.05);}
 h1 { font-size:22px; }
 input { padding:8px; margin:4px 0; width:100%; border-radius:8px; border:1px solid #ddd;}
-button { padding:10px; width:100%; border:none; border-radius:10px; background:#111827; color:white; font-size:16px;}
-.month { background:#fafafa; padding:10px; border-radius:12px; margin-top:10px;}
-canvas { background:white; border-radius:16px; }
+button { padding:8px 12px; border:none; border-radius:8px; background:#111827; color:white;}
+.month { background:#fafafa; padding:10px; border-radius:12px; margin-top:10px; cursor:pointer;}
+.blue { color:#2563eb; font-weight:bold;}
+.red { color:#dc2626; font-weight:bold;}
+.day-row { padding:6px 0; border-bottom:1px solid #eee;}
 </style>
 </head>
 <body>
@@ -21,16 +23,13 @@ canvas { background:white; border-radius:16px; }
 <div class="card">
 <label>日付</label>
 <input type="date" id="date">
-
 <label>開始時間</label>
 <input type="time" id="start">
-
 <label>終了時間</label>
 <input type="time" id="end">
-
 <label>月間上限時間</label>
-<input type="number" id="limit" value="160">
-
+<input type="number" id="limit" value="275">
+<br><br>
 <button onclick="addEntry()">追加</button>
 </div>
 
@@ -40,8 +39,8 @@ canvas { background:white; border-radius:16px; }
 </div>
 
 <div class="card">
-<h2>グラフ</h2>
-<canvas id="chart" height="200"></canvas>
+<h2>日別一覧</h2>
+<div id="daily"></div>
 </div>
 
 <script>
@@ -51,36 +50,35 @@ function save() {
 localStorage.setItem("workData", JSON.stringify(entries));
 }
 
-function calculateHours(start, end) {
-let [sh, sm] = start.split(":").map(Number);
-let [eh, em] = end.split(":").map(Number);
-return (eh + em/60) - (sh + sm/60);
+function calculateHours(start,end){
+let [sh,sm]=start.split(":").map(Number);
+let [eh,em]=end.split(":").map(Number);
+return (eh+em/60)-(sh+sm/60);
 }
 
-function addEntry() {
-let date = document.getElementById("date").value;
-let start = document.getElementById("start").value;
-let end = document.getElementById("end").value;
-if (!date || !start || !end) return;
-
-let hours = calculateHours(start,end);
-entries.push({date, hours});
+function addEntry(){
+let date=document.getElementById("date").value;
+let start=document.getElementById("start").value;
+let end=document.getElementById("end").value;
+if(!date||!start||!end)return;
+entries.push({date,start,end});
 save();
 render();
 }
 
-function render() {
-let limit = Number(document.getElementById("limit").value);
-let summary = {};
+function render(){
+let limit=Number(document.getElementById("limit").value);
+let summary={};
+
 entries.forEach(e=>{
-let month = e.date.slice(0,7);
+let month=e.date.slice(0,7);
+let hours=calculateHours(e.start,e.end);
 if(!summary[month]) summary[month]=0;
-summary[month]+=e.hours;
+summary[month]+=hours;
 });
 
 let container=document.getElementById("summary");
 container.innerHTML="";
-
 let cumulativeActual=0;
 let cumulativeLimit=0;
 
@@ -88,43 +86,53 @@ Object.keys(summary).sort().forEach(month=>{
 let actual=summary[month];
 cumulativeActual+=actual;
 cumulativeLimit+=limit;
-let diff=limit-actual;
-let cumulativeDiff=cumulativeLimit-cumulativeActual;
+
+let diff=actual-limit;
+let cumulativeDiff=cumulativeActual-cumulativeLimit;
+
+let diffClass=diff>=0?"red":"blue";
+let cumClass=cumulativeDiff>=0?"red":"blue";
 
 container.innerHTML+=`
-<div class="month">
+<div class="month" onclick="showMonth('${month}')">
 <b>${month}</b><br>
 実労働時間: ${actual.toFixed(2)} 時間<br>
-上限との差: ${diff.toFixed(2)} 時間<br>
-累積差異: ${cumulativeDiff.toFixed(2)} 時間
-</div>
-`;
+差異: <span class="${diffClass}">
+${diff>=0?"+":""}${diff.toFixed(2)} 時間</span><br>
+累積差異: <span class="${cumClass}">
+${cumulativeDiff>=0?"+":""}${cumulativeDiff.toFixed(2)} 時間</span>
+</div>`;
 });
-
-drawChart(summary,limit);
 }
 
-function drawChart(summary,limit){
-let canvas=document.getElementById("chart");
-let ctx=canvas.getContext("2d");
-ctx.clearRect(0,0,canvas.width,canvas.height);
+function showMonth(month){
+let daily=document.getElementById("daily");
+daily.innerHTML="";
 
-let months=Object.keys(summary).sort();
-let max=Math.max(...Object.values(summary),limit);
-let width=canvas.width/months.length;
+let filtered=entries.filter(e=>e.date.startsWith(month));
 
-months.forEach((m,i)=>{
-let h=summary[m]/max*150;
-ctx.fillStyle="#111827";
-ctx.fillRect(i*width+20,180-h,30,h);
+filtered.sort((a,b)=>a.date.localeCompare(b.date));
 
-let limitH=limit/max*150;
-ctx.fillStyle="#999";
-ctx.fillRect(i*width+60,180-limitH,10,limitH);
-
-ctx.fillStyle="black";
-ctx.fillText(m,i*width+20,195);
+filtered.forEach((e,index)=>{
+daily.innerHTML+=`
+<div class="day-row">
+${e.date}<br>
+開始:
+<input type="time" value="${e.start}"
+onchange="updateEntry('${e.date}',this.value,null)">
+終了:
+<input type="time" value="${e.end}"
+onchange="updateEntry('${e.date}',null,this.value)">
+</div>`;
 });
+}
+
+function updateEntry(date,newStart,newEnd){
+let entry=entries.find(e=>e.date===date);
+if(newStart!==null) entry.start=newStart;
+if(newEnd!==null) entry.end=newEnd;
+save();
+render();
 }
 
 render();
