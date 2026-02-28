@@ -58,14 +58,22 @@ return (eh+em/60)-(sh+sm/60);
 
 function addEntry(){
 let date=document.getElementById("date").value;
-let start=document.getElementById("start").value;
-let end=document.getElementById("end").value;
-if(!date||!start||!end)return;
-entries.push({date,start,end});
-save();
-render();
-}
+  let start=document.getElementById("start").value;
+  let end=document.getElementById("end").value;
+  if(!date||!start||!end)return;
 
+  // 同じ日付があれば上書き（1日1レコード）
+  let existingIndex = entries.findIndex(e => e.date === date);
+  if(existingIndex >= 0){
+    entries[existingIndex].start = start;
+    entries[existingIndex].end = end;
+  } else {
+    entries.push({date,start,end});
+  }
+
+  save();
+  render();
+}
 function render(){
 let limit=Number(document.getElementById("limit").value);
 let summary={};
