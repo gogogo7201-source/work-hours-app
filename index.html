@@ -5,15 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>労働時間管理アプリ</title>
 <style>
-body { font-family:-apple-system; margin:0; padding:20px; background:#f3f4f6;}
-.card { background:white; padding:16px; border-radius:16px; margin-bottom:20px; box-shadow:0 4px 10px rgba(0,0,0,0.05);}
-h1 { font-size:22px; }
-input { padding:8px; margin:4px 0; width:100%; border-radius:8px; border:1px solid #ddd;}
-button { padding:8px 12px; border:none; border-radius:8px; background:#111827; color:white;}
-.month { background:#fafafa; padding:10px; border-radius:12px; margin-top:10px; cursor:pointer;}
-.blue { color:#2563eb; font-weight:bold;}
-.red { color:#dc2626; font-weight:bold;}
-.day-row { padding:6px 0; border-bottom:1px solid #eee;}
+  body { font-family:-apple-system; margin:0; padding:20px; background:#f3f4f6;}
+  .card { background:white; padding:16px; border-radius:16px; margin-bottom:20px; box-shadow:0 4px 10px rgba(0,0,0,0.05);}
+  h1 { font-size:22px; margin: 0 0 12px; }
+  h2 { font-size:18px; margin: 0 0 10px; }
+  label { display:block; margin-top:10px; font-size:14px; }
+  input { padding:10px; margin:6px 0; width:100%; border-radius:10px; border:1px solid #ddd; font-size:16px; }
+  button { padding:10px 12px; width:100%; border:none; border-radius:12px; background:#111827; color:white; font-size:16px;}
+  .month { background:#fafafa; padding:12px; border-radius:14px; margin-top:10px; cursor:pointer; }
+  .month:active { transform: scale(0.99); }
+  .blue { color:#2563eb; font-weight:700; }
+  .red  { color:#dc2626; font-weight:700; }
+  .muted { color:#6b7280; }
+  .day-row { padding:10px 0; border-bottom:1px solid #eee; }
+  .day-head { font-weight:700; margin-bottom:8px; }
+  .row { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef2ff; font-size:12px; margin-left:6px; }
+  .small { font-size:12px; }
 </style>
 </head>
 <body>
@@ -21,138 +29,207 @@ button { padding:8px 12px; border:none; border-radius:8px; background:#111827; c
 <h1>労働時間管理アプリ</h1>
 
 <div class="card">
-<label>日付</label>
-<input type="date" id="date">
-<label>開始時間</label>
-<input type="time" id="start">
-<label>終了時間</label>
-<input type="time" id="end">
-<label>月間上限時間</label>
-<input type="number" id="limit" value="275">
-<br><br>
-<button onclick="addEntry()">追加</button>
+  <label>日付</label>
+  <input type="date" id="date">
+
+  <div class="row">
+    <div>
+      <label>開始時間</label>
+      <input type="time" id="start">
+    </div>
+    <div>
+      <label>終了時間</label>
+      <input type="time" id="end">
+    </div>
+  </div>
+
+  <label>月間上限時間</label>
+  <input type="number" id="limit" value="275" inputmode="decimal">
+
+  <button onclick="addEntry()">追加（同じ日付は上書き）</button>
+  <div class="muted small" style="margin-top:10px;">
+    ※ データはこのiPhone内（ローカル）に保存されます
+  </div>
 </div>
 
 <div class="card">
-<h2>月別集計</h2>
-<div id="summary"></div>
+  <h2>月別集計</h2>
+  <div id="summary"></div>
 </div>
 
 <div class="card">
-<h2>日別一覧</h2>
-<div id="daily"></div>
+  <h2>日別一覧 <span class="pill" id="selectedMonthPill">未選択</span></h2>
+  <div id="daily" class="muted">月別集計の枠をタップすると、その月の日別一覧が表示されます。</div>
 </div>
 
 <script>
-let entries = JSON.parse(localStorage.getItem("entries = normalizeEntries(entries);
+/** ========== ストレージ ========== */
+function loadEntries(){
+  try{
+    return JSON.parse(localStorage.getItem("workData") || "[]");
+  }catch(e){
+    return [];
+  }
+}
+function saveEntries(list){
+  localStorage.setItem("workData", JSON.stringify(list));
+}
 
-   entries = normalizeEntries(entries);
-save();                                           
-
-function save() 
+/** ========== 同じ日付の重複を整理（最後の入力を残す） ========== */
 function normalizeEntries(list){
   const byDate = {};
-  list.forEach(e=>{
+  (list || []).forEach(e=>{
     if(e && e.date){
-      byDate[e.date] = {date:e.date,start:e.start,end:e.end};
+      byDate[e.date] = { date: e.date, start: e.start || "", end: e.end || "" };
     }
   });
   return Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
-}{
-localStorage.setItem("workData", JSON.stringify(entries));
 }
 
+let entries = normalizeEntries(loadEntries());
+saveEntries(entries);
+
+/** ========== 計算 ========== */
 function calculateHours(start,end){
-let [sh,sm]=start.split(":").map(Number);
-let [eh,em]=end.split(":").map(Number);
-return (eh+em/60)-(sh+sm/60);
+  if(!start || !end) return 0;
+  const [sh,sm]=start.split(":").map(Number);
+  const [eh,em]=end.split(":").map(Number);
+  const diff = (eh+em/60)-(sh+sm/60);
+  return diff>0 ? diff : 0; // 終了が開始より前は0扱い
 }
 
-function addEntry(){
-let date=document.getElementById("date").value;
-  let start=document.getElementById("start").value;
-  let end=document.getElementById("end").value;
-  if(!date||!start||!end)return;
+function formatSigned(num){
+  const n = Number(num);
+  return (n>=0 ? "+" : "") + n.toFixed(2);
+}
+function signedClass(num){
+  return Number(num) >= 0 ? "red" : "blue";
+}
 
-  // 同じ日付があれば上書き（1日1レコード）
-  let existingIndex = entries.findIndex(e => e.date === date);
-  if(existingIndex >= 0){
-    entries[existingIndex].start = start;
-    entries[existingIndex].end = end;
-  } else {
+/** ========== 追加（同じ日付は上書き） ========== */
+function addEntry(){
+  const date=document.getElementById("date").value;
+  const start=document.getElementById("start").value;
+  const end=document.getElementById("end").value;
+  if(!date||!start||!end) return;
+
+  const i = entries.findIndex(e=>e.date===date);
+  if(i>=0){
+    entries[i].start=start;
+    entries[i].end=end;
+  }else{
     entries.push({date,start,end});
+    entries.sort((a,b)=>a.date.localeCompare(b.date));
   }
 
-  save();
+  entries = normalizeEntries(entries); // 念のため常に正規化
+  saveEntries(entries);
   render();
+
+  // 入力欄を軽くリセット（任意）
+  // document.getElementById("start").value="";
+  // document.getElementById("end").value="";
 }
+
+/** ========== 月別集計・表示 ========== */
 function render(){
-let limit=Number(document.getElementById("limit").value);
-let summary={};
+  const limit = Number(document.getElementById("limit").value) || 0;
 
-entries.forEach(e=>{
-let month=e.date.slice(0,7);
-let hours=calculateHours(e.start,e.end);
-if(!summary[month]) summary[month]=0;
-summary[month]+=hours;
-});
+  // 月別合計
+  const monthlyTotals = {};
+  entries.forEach(e=>{
+    const month = e.date.slice(0,7);
+    const hours = calculateHours(e.start,e.end);
+    if(!monthlyTotals[month]) monthlyTotals[month]=0;
+    monthlyTotals[month]+=hours;
+  });
 
-let container=document.getElementById("summary");
-container.innerHTML="";
-let cumulativeActual=0;
-let cumulativeLimit=0;
+  const months = Object.keys(monthlyTotals).sort();
+  const summaryEl = document.getElementById("summary");
+  summaryEl.innerHTML = "";
 
-Object.keys(summary).sort().forEach(month=>{
-let actual=summary[month];
-cumulativeActual+=actual;
-cumulativeLimit+=limit;
+  if(months.length === 0){
+    summaryEl.innerHTML = `<div class="muted">まだデータがありません</div>`;
+    document.getElementById("selectedMonthPill").textContent = "未選択";
+    return;
+  }
 
-let diff=actual-limit;
-let cumulativeDiff=cumulativeActual-cumulativeLimit;
+  let cumulativeActual = 0;
+  let cumulativeLimit = 0;
 
-let diffClass=diff>=0?"red":"blue";
-let cumClass=cumulativeDiff>=0?"red":"blue";
+  months.forEach(month=>{
+    const actual = monthlyTotals[month];
+    cumulativeActual += actual;
+    cumulativeLimit += limit;
 
-container.innerHTML+=`
-<div class="month" onclick="showMonth('${month}')">
-<b>${month}</b><br>
-実労働時間: ${actual.toFixed(2)} 時間<br>
-差異: <span class="${diffClass}">
-${diff>=0?"+":""}${diff.toFixed(2)} 時間</span><br>
-累積差異: <span class="${cumClass}">
-${cumulativeDiff>=0?"+":""}${cumulativeDiff.toFixed(2)} 時間</span>
-</div>`;
-});
+    // あなたの要望：上限に対して、オーバーなら＋、未達なら−
+    // → actual - limit（未達ならマイナス、超過ならプラス）
+    const diff = actual - limit;
+    const cumulativeDiff = cumulativeActual - cumulativeLimit;
+
+    summaryEl.innerHTML += `
+      <div class="month" onclick="showMonth('${month}')">
+        <div class="day-head">${month}</div>
+        <div>実労働時間: ${actual.toFixed(2)} 時間</div>
+        <div>上限差異: <span class="${signedClass(diff)}">${formatSigned(diff)} 時間</span></div>
+        <div>累積差異: <span class="${signedClass(cumulativeDiff)}">${formatSigned(cumulativeDiff)} 時間</span></div>
+      </div>
+    `;
+  });
 }
 
+/** ========== 月タップで日別一覧表示（入力日のみ） ========== */
 function showMonth(month){
-let daily=document.getElementById("daily");
-daily.innerHTML="";
+  document.getElementById("selectedMonthPill").textContent = month;
 
-let filtered=entries.filter(e=>e.date.startsWith(month));
+  const dailyEl = document.getElementById("daily");
+  const filtered = entries.filter(e=>e.date.startsWith(month));
 
-filtered.sort((a,b)=>a.date.localeCompare(b.date));
+  if(filtered.length === 0){
+    dailyEl.className = "muted";
+    dailyEl.innerHTML = "この月の入力はありません。";
+    return;
+  }
 
-filtered.forEach((e,index)=>{
-daily.innerHTML+=`
-<div class="day-row">
-${e.date}<br>
-開始:
-<input type="time" value="${e.start}"
-onchange="updateEntry('${e.date}',this.value,null)">
-終了:
-<input type="time" value="${e.end}"
-onchange="updateEntry('${e.date}',null,this.value)">
-</div>`;
-});
+  dailyEl.className = "";
+  dailyEl.innerHTML = "";
+
+  filtered.forEach(e=>{
+    dailyEl.innerHTML += `
+      <div class="day-row">
+        <div class="day-head">${e.date}</div>
+        <div class="row">
+          <div>
+            <label class="small">開始</label>
+            <input type="time" value="${e.start}" onchange="updateEntry('${e.date}', this.value, null)">
+          </div>
+          <div>
+            <label class="small">終了</label>
+            <input type="time" value="${e.end}" onchange="updateEntry('${e.date}', null, this.value)">
+          </div>
+        </div>
+      </div>
+    `;
+  });
 }
 
+/** ========== 日別編集（同じ日付は1件前提） ========== */
 function updateEntry(date,newStart,newEnd){
-let entry=entries.find(e=>e.date===date);
-if(newStart!==null) entry.start=newStart;
-if(newEnd!==null) entry.end=newEnd;
-save();
-render();
+  const i = entries.findIndex(e=>e.date===date);
+  if(i<0) return;
+
+  if(newStart!==null) entries[i].start=newStart;
+  if(newEnd!==null) entries[i].end=newEnd;
+
+  entries = normalizeEntries(entries);
+  saveEntries(entries);
+  render();
+
+  // 編集した月が表示中なら再描画（表示の開始/終了が即反映）
+  const month = date.slice(0,7);
+  if(document.getElementById("selectedMonthPill").textContent === month){
+    showMonth(month);
+  }
 }
 
 render();
