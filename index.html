@@ -44,9 +44,21 @@ button { padding:8px 12px; border:none; border-radius:8px; background:#111827; c
 </div>
 
 <script>
-let entries = JSON.parse(localStorage.getItem("workData") || "[]");
+let entries = JSON.parse(localStorage.getItem("entries = normalizeEntries(entries);
 
-function save() {
+   entries = normalizeEntries(entries);
+save();                                           
+
+function save() 
+function normalizeEntries(list){
+  const byDate = {};
+  list.forEach(e=>{
+    if(e && e.date){
+      byDate[e.date] = {date:e.date,start:e.start,end:e.end};
+    }
+  });
+  return Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
+}{
 localStorage.setItem("workData", JSON.stringify(entries));
 }
 
